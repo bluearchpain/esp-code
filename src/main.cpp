@@ -9,8 +9,8 @@
 #define API_KEY "AIzaSyA-fLHq8BT1xWlFNBPZseQyNag_wE3Aers"
 #define DATABASE_URL "mazen-e8d54-default-rtdb.firebaseio.com"
 
-#define WIFI_SSID "1"               //  WiFi SSID
-#define WIFI_PASSWORD "123456789" //  WiFi password
+#define WIFI_SSID "Wael"         //  WiFi SSID
+#define WIFI_PASSWORD "12345678" //  WiFi password
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -19,35 +19,37 @@ unsigned long sendDataPrevMillis = 0;
 int read_data;
 bool signupSuccess = false;
 
-
-#define OUTPUT_PIN 21 // Output pin to trigger when motion is detected
-#define PIN_LED 4    // Define the pin number to which LED is connected
-#define PIN_SENSOR 33 // Define the pin number to which MQ2 sensor is connected
-#define TRIGGER_PIN 18  // Define the trigger pin for HC-SR04
+#define OUTPUT_PIN 21  // Output pin to trigger when motion is detected
+#define PIN_LED 4      // Define the pin number to which LED is connected
+#define PIN_SENSOR 33  // Define the pin number to which MQ2 sensor is connected
+#define TRIGGER_PIN 18 // Define the trigger pin for HC-SR04
 #define ECHO_PIN 19    // Define the echo pin for HC-SR04
-#define MOTION_LED 21 // Define the pin number to which lamp is connected
+#define MOTION_LED 21  // Define the pin number to which lamp is connected
 #define DHTPIN 14      // Digital pin connected to the DHT sensor
-#define DHTTYPE DHT11 // DHT 11
-#define BUZZER_PIN 2 // Define the pin number to which buzzer is connected
+#define DHTTYPE DHT11  // DHT 11
+#define BUZZER_PIN 2   // Define the pin number to which buzzer is connected
+#define ACTION_LED 23
 
 Servo servoMotor;
 DHT dht(DHTPIN, DHTTYPE);
 
 int thresholdValue = 275; // Define the threshold value for MQ2 sensor reading
+int actionValue = 0;
 
 void setup()
 {
 
   pinMode(OUTPUT_PIN, OUTPUT);
   digitalWrite(OUTPUT_PIN, LOW); // Ensure output pin is initially low
-  servoMotor.attach(15);              // Attaching servo motor to pin 14
-  pinMode(PIN_LED, OUTPUT);           // Set pin 26 as output for LED
-  pinMode(PIN_SENSOR, INPUT);         // Set pin 36 as input for MQ2 sensor
-  pinMode(MOTION_LED, OUTPUT);        // Set pin 27 as output for lamp
-  pinMode(TRIGGER_PIN, OUTPUT);       // Set trigger pin for HC-SR04 as output
-  pinMode(ECHO_PIN, INPUT);           // Set echo pin for HC-SR04 as input
-  pinMode(BUZZER_PIN, OUTPUT);        // Set pin for buzzer as output
-  Serial.begin(9600);                 // Initialize serial communication
+  servoMotor.attach(15);         // Attaching servo motor to pin 14
+  pinMode(PIN_LED, OUTPUT);      // Set pin 26 as output for LED
+  pinMode(PIN_SENSOR, INPUT);    // Set pin 36 as input for MQ2 sensor
+  pinMode(MOTION_LED, OUTPUT);   // Set pin 27 as output for lamp
+  pinMode(TRIGGER_PIN, OUTPUT);  // Set trigger pin for HC-SR04 as output
+  pinMode(ECHO_PIN, INPUT);      // Set echo pin for HC-SR04 as input
+  pinMode(BUZZER_PIN, OUTPUT);   // Set pin for buzzer as output
+  pinMode(ACTION_LED, OUTPUT);   // Set pin 27 as output for lamp
+  Serial.begin(9600);            // Initialize serial communication
   dht.begin();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
@@ -84,6 +86,7 @@ void setup()
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+  // Firebase.RTDB.beginStream(&fbdo, "/action");
 }
 
 void loop()
@@ -91,10 +94,10 @@ void loop()
   int sensorValue = analogRead(PIN_SENSOR); // Read MQ2 sensor value
   Serial.print("MQ2 Sensor value: ");
   Serial.println(sensorValue); // Print MQ2 sensor value
-  Firebase.RTDB.setInt(&fbdo, "/gasPercentage", sensorValue);
+  Firebase.RTDB.setIntAsync(&fbdo, "/gasPercentage", sensorValue);
 
   if (sensorValue <= thresholdValue)
-  { // Check if MQ2 sensor value is above threshold
+  {                              // Check if MQ2 sensor value is above threshold
     digitalWrite(PIN_LED, HIGH); // If MQ2 sensor value is above threshold, turn on LED
   }
   else
@@ -117,7 +120,7 @@ void loop()
   Serial.println(distance);
 
   if (distance < 15)
-  { // If an object is detected within 50cm range (adjust as needed)
+  {                                 // If an object is detected within 50cm range (adjust as needed)
     digitalWrite(MOTION_LED, HIGH); // Turn on lamp
     tone(BUZZER_PIN, 1000);         // Turn on buzzer at 1000Hz frequency
     delay(500);                     // Sound buzzer for half a second
@@ -144,24 +147,55 @@ void loop()
   Serial.print("%  Temperature: ");
   Serial.print(temperature);
   Serial.println("°C");
-  Firebase.RTDB.setInt(&fbdo, "/temperature", temperature);
-    Firebase.RTDB.setInt(&fbdo, "/humidity", humidity);
-
+  Firebase.RTDB.setIntAsync(&fbdo, "/temperature", temperature);
+  Firebase.RTDB.setIntAsync(&fbdo, "/humidity", humidity);
+  // Firebase.RTDB.handle
 
   // If the distance is less than or equal to 40cm, rotate the servo motor 90 degrees
   if (distance <= 15)
   {
     servoMotor.write(90);
-    delay(500); // Wait for the servo to reach its position
-     Serial.println("Door open"); // Print statement
+    delay(500);                  // Wait for the servo to reach its position
+    Serial.println("Door open"); // Print statement
   }
   else
   {
     // Otherwise, return the servo motor to its initial position
     servoMotor.write(0);
-    delay(500); // Wait for the servo to reach its position
-     Serial.println("Door closed"); // Print statement
+    delay(500);                    // Wait for the servo to reach its position
+    Serial.println("Door closed"); // Print statement
   }
 
+  if (Firebase.RTDB.getInt(&fbdo, "/action"))
+  {
+    actionValue = fbdo.intData();
+    if (actionValue == 0)
+    {
+      digitalWrite(ACTION_LED, LOW);
+    }
+    else
+    {
+      digitalWrite(ACTION_LED, HIGH);
+    }
+    Serial.print("Action value: ");
+    Serial.println(actionValue);
+  }
+  else
+  {
+    Serial.println("Failed to get action value");
+  }
+
+  // if (Firebase.RTDB.getInt(&fbdo, "/action") == 0)
+  // {
+  //   digitalWrite(ACTION_LED, LOW);
+  //   Serial.println("0");
+  // }
+  // else if (Firebase.RTDB.getInt(&fbdo, "/action") == 1)
+  // {
+  //   digitalWrite(ACTION_LED, HIGH);
+  //   Serial.println("1");
+  //   Firebase.RTDB.setInt(&fbdo, "/action", 0);
+  //   // Serial.println()
+  // }
   delay(500); // Wait for 1 second before taking the next reading
 }
